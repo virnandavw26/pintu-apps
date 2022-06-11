@@ -1,0 +1,57 @@
+stages:
+  - test
+  - deploy
+  - output
+
+variables:
+  APP: nanda-pintu-apps
+
+.init: &init
+  - echo $CREDENTIALS | base64 -d > serviceaccountkey.json
+  - gcloud auth activate-service-account $CLIENT_EMAIL --key-file=serviceaccountkey.json --project=$PROJECT_ID
+  - gcloud container clusters get-credentials $GKE_CLUSTER --region $REGION --project $PROJECT_ID
+
+test:
+  stage: test
+  image: virnandavw/pintu-apps:1.0
+  script:
+    - go test -v
+
+deploy:
+  stage: deploy
+  image: virnandavw/pintu-apps:1.0
+  only:
+    refs:
+      - master
+    variables:
+      - $CREDENTIALS
+      - $CLIENT_EMAIL
+      - $PROJECT_ID
+      - $GKE_CLUSTER
+      - $REGION
+  before_script: *init
+  script:
+    - cd manifest
+    - kubectl apply -f namespace.yml
+    - kubectl apply -f deployment.yml
+    - kubectl apply -f service.yml
+    - kubectl apply -f ingress.yml
+
+output:
+  stage: output
+  image: rivaldyarif/bmri-echoserver:1.0
+  only:
+    refs:
+      - master
+    variables:
+      - $CREDENTIALS
+      - $CLIENT_EMAIL
+      - $PROJECT_ID
+      - $GKE_CLUSTER
+      - $REGION
+  before_script: *init
+  script:
+    - kubectl get deployment | grep $APP
+    - kubectl get service | grep $APP
+    - kubectl get ingress
+
